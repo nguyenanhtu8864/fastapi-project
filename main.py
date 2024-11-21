@@ -3,7 +3,7 @@ from fastapi import FastAPI, HTTPException
 
 from fastapi.middleware.cors import CORSMiddleware
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from passlib.context import CryptContext
 
@@ -75,31 +75,44 @@ async def ping_mongodb():
 
 
 class User(BaseModel):
-    username: str
-    name: str
-    password: str
+    username: str = Field(
+        ...,
+        min_length=6,
+        max_length=20,
+        pattern="^[a-z][a-z0-9]*$",
+    )
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+    )
+    password: str = Field(
+        ...,
+        min_length=6,
+        max_length=20,
+    )
 
-    @field_validator("password")
-    def validate_password(cls, password: str) -> str:
-        if len(password) < 8:
-            raise HTTPException(
-                status_code=422, detail="Password must be at least 8 characters long."
-            )
-        if not any(char.isdigit() for char in password):
-            raise HTTPException(
-                status_code=422, detail="Password must contains at least one number."
-            )
-        if not any(char.isupper() for char in password):
-            raise HTTPException(
-                status_code=422,
-                detail="Password must contain at least one uppercase letter.",
-            )
-        if not any(char in "!@#$%^&*()-_+=" for char in password):
-            raise HTTPException(
-                status_code=422,
-                detail="Password must contain at least one special character.",
-            )
-        return hash_password(password)
+    # @field_validator("password")
+    # def validate_password(cls, password: str) -> str:
+    # if len(password) < 8:
+    #     raise HTTPException(
+    #         status_code=422, detail="Password must be at least 8 characters long."
+    #     )
+    # if not any(char.isdigit() for char in password):
+    #     raise HTTPException(
+    #         status_code=422, detail="Password must contains at least one number."
+    #     )
+    # if not any(char.isupper() for char in password):
+    #     raise HTTPException(
+    #         status_code=422,
+    #         detail="Password must contain at least one uppercase letter.",
+    #     )
+    # if not any(char in "!@#$%^&*()-_+=" for char in password):
+    #     raise HTTPException(
+    #         status_code=422,
+    #         detail="Password must contain at least one special character.",
+    #     )
+    # return hash_password(password)
 
 
 class UserResponse(BaseModel):
@@ -119,6 +132,7 @@ async def user_register(user_model: User):
         existing_user = await db.user.find_one({"username": user_model.username})
         if existing_user:
             raise ValueError("Username already exists")
+        user_model.password = hash_password(user_model.password)
         result = await db.user.insert_one(user_model.model_dump())
         user = await db.user.find_one({"_id": result.inserted_id})
         return RegisterResponse(
